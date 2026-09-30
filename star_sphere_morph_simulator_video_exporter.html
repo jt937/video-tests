@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Sphere Morph Generator</title>
+    <!-- Tailwind CSS for UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D Graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #030712;
+            color: #f3f4f6;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        /* 16:9 Container styling */
+        .aspect-16-9-box {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
+        }
+
+        .aspect-16-9-inner {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Glassmorphism panel styling */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Custom scrollbar for controls */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Custom range slider styles */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: #60a5fa;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -5px;
+            box-shadow: 0 0 10px rgba(96, 165, 250, 0.8);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-0 md:p-4 bg-gray-950">
+
+    <!-- Main Outer Wrapper -->
+    <div id="appContainer" class="w-full max-w-[1920px] mx-auto flex flex-col items-center justify-center relative">
+        
+        <!-- 16:9 Aspect Ratio Display Frame -->
+        <div id="canvasViewport" class="aspect-16-9-box overflow-hidden rounded-none md:rounded-2xl border border-gray-800/80 bg-black">
+            <div class="aspect-16-9-inner flex items-center justify-center">
+                <!-- WebGL Canvas Target -->
+                <canvas id="webglCanvas" class="w-full h-full block"></canvas>
+            </div>
+
+            <!-- Top Left Info Header Overlay -->
+            <div class="absolute top-4 left-4 z-20 pointer-events-none flex items-center space-x-3 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                <div class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></div>
+                <span class="text-xs font-semibold tracking-wider uppercase text-gray-300" id="statusBadge">Active Loop</span>
+                <span class="text-xs text-gray-500">|</span>
+                <span class="text-xs font-mono text-gray-400" id="timeDisplay">00:00 / 01:30</span>
+            </div>
+
+            <!-- Top Right UI Controls Toggles -->
+            <div class="absolute top-4 right-4 z-20 flex items-center space-x-2">
+                <button id="toggleControlsBtn" class="glass-panel text-white hover:bg-white/10 p-2 rounded-xl transition flex items-center space-x-2 text-xs font-medium" title="Toggle Controls">
+                    <i data-lucide="sliders" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Controls</span>
+                </button>
+                <button id="fullscreenBtn" class="glass-panel text-white hover:bg-white/10 p-2 rounded-xl transition" title="Toggle Fullscreen">
+                    <i data-lucide="maximize" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <!-- Glassmorphism Floating Control Panel -->
+            <div id="controlPanel" class="glass-panel absolute right-4 top-16 bottom-16 w-80 sm:w-96 rounded-2xl p-4 z-30 transition-all duration-300 transform translate-x-0 overflow-y-auto flex flex-col space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                    <h2 class="text-sm font-bold tracking-wide uppercase text-white flex items-center gap-2">
+                        <i data-lucide="sparkles" class="w-4 h-4 text-blue-400"></i> Particle Field Setup
+                    </h2>
+                    <span class="text-xs text-blue-400 font-mono" id="particleCountBadge">30,000 Stars</span>
+                </div>
+
+                <!-- Control Sliders Group -->
+                <div class="space-y-3 flex-1 text-xs text-gray-300">
+                    <!-- Particle Count Slider -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="font-medium text-gray-300">Star Count</label>
+                            <span id="starCountVal" class="font-mono text-gray-400">30,000</span>
+                        </div>
+                        <input type="range" id="starCountInput" min="5000" max="80000" step="2500" value="30000" class="w-full">
+                    </div>
+
+                    <!-- Brightness Slider -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="font-medium text-gray-300">Max Brightness</label>
+                            <span id="brightnessVal" class="font-mono text-gray-400">1.2</span>
+                        </div>
+                        <input type="range" id="brightnessInput" min="0.2" max="3.0" step="0.1" value="1.2" class="w-full">
+                    </div>
+
+                    <!-- Glow Intensity / Size -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="font-medium text-gray-300">Star Size / Halo Glow</label>
+                            <span id="glowVal" class="font-mono text-gray-400">22</span>
+                        </div>
+                        <input type="range" id="glowInput" min="8" max="50" step="1" value="22" class="w-full">
+                    </div>
+
+                    <!-- Twinkle Speed -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="font-medium text-gray-300">Flicker Speed</label>
+                            <span id="twinkleVal" class="font-mono text-gray-400">1.0</span>
+                        </div>
+                        <input type="range" id="twinkleInput" min="0.1" max="3.0" step="0.1" value="1.0" class="w-full">
+                    </div>
+
+                    <!-- Sphere Radius -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="font-medium text-gray-300">Sphere Radius</label>
+                            <span id="radiusVal" class="font-mono text-gray-400">4.5</span>
+                        </div>
+                        <input type="range" id="radiusInput" min="2.0" max="10.0" step="0.2" value="4.5" class="w-full">
+                    </div>
+
+                    <!-- Rotation Speed -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="font-medium text-gray-300">Sphere Rotation Speed</label>
+                            <span id="rotationVal" class="font-mono text-gray-400">0.15</span>
+                        </div>
+                        <input type="range" id="rotationInput" min="0.0" max="0.8" step="0.02" value="0.15" class="w-full">
+                    </div>
+
+                    <!-- Cycle Duration -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="font-medium text-gray-300">Cycle Duration (sec)</label>
+                            <span id="durationVal" class="font-mono text-gray-400">90s</span>
+                        </div>
+                        <input type="range" id="durationInput" min="15" max="180" step="5" value="90" class="w-full">
+                    </div>
+                </div>
+
+                <!-- Export Section -->
+                <div class="pt-3 border-t border-white/10 space-y-2">
+                    <h3 class="text-xs font-semibold uppercase text-gray-400 tracking-wider">Video Export Options</h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="export1080Btn" class="bg-blue-600/80 hover:bg-blue-600 text-white py-2 px-3 rounded-xl font-medium text-xs transition flex items-center justify-center space-x-1 shadow-lg shadow-blue-500/20">
+                            <i data-lucide="video" class="w-3.5 h-3.5"></i>
+                            <span>Export 1080p</span>
+                        </button>
+                        <button id="export4kBtn" class="bg-purple-600/80 hover:bg-purple-600 text-white py-2 px-3 rounded-xl font-medium text-xs transition flex items-center justify-center space-x-1 shadow-lg shadow-purple-500/20">
+                            <i data-lucide="film" class="w-3.5 h-3.5"></i>
+                            <span>Export 4K UHD</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Playback & Timeline Controls Bar -->
+            <div class="absolute bottom-4 left-4 right-4 z-20 glass-panel rounded-2xl px-4 py-3 flex items-center space-x-4">
+                <button id="playPauseBtn" class="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition shadow-lg shadow-blue-600/30">
+                    <i data-lucide="pause" class="w-4 h-4" id="playPauseIcon"></i>
+                </button>
+                
+                <button id="resetBtn" class="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition" title="Reset Timeline">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </button>
+
+                <!-- Timeline Scrubber Bar -->
+                <div class="flex-1 flex flex-col justify-center">
+                    <input type="range" id="timelineScrubber" min="0" max="100" step="0.1" value="0" class="w-full">
+                    <div class="flex justify-between text-[10px] text-gray-400 mt-1 font-mono">
+                        <span>0s (Fade In)</span>
+                        <span>30s (Morphing)</span>
+                        <span>60s (Sphere Formed)</span>
+                        <span>90s (Fade Out)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Rendering Progress Modal Overlay -->
+            <div id="renderModal" class="hidden absolute inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center">
+                <div class="w-16 h-16 mb-4 relative flex items-center justify-center">
+                    <div class="absolute inset-0 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin"></div>
+                    <i data-lucide="video" class="w-6 h-6 text-blue-400"></i>
+                </div>
+                <h3 class="text-lg font-bold text-white mb-1" id="renderTitle">Rendering Video...</h3>
+                <p class="text-xs text-gray-400 max-w-sm mb-4" id="renderSubtitle">Capturing high-quality frames in real-time. Please do not close or switch tabs.</p>
+                
+                <!-- Progress Bar -->
+                <div class="w-full max-w-md bg-gray-800 h-2.5 rounded-full overflow-hidden mb-2">
+                    <div id="renderProgressBar" class="bg-gradient-to-r from-blue-500 to-purple-500 h-full w-0 transition-all duration-100"></div>
+                </div>
+                <span id="renderPercent" class="font-mono text-sm font-semibold text-blue-400">0%</span>
+
+                <button id="cancelRenderBtn" class="mt-6 px-4 py-2 rounded-xl border border-white/20 text-xs text-gray-300 hover:bg-white/10 transition">
+                    Cancel Export
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        /* Global Application State */
+        const state = {
+            count: 30000,
+            brightness: 1.2,
+            glowSize: 22.0,
+            twinkleSpeed: 1.0,
+            radius: 4.5,
+            rotationSpeed: 0.15,
+            duration: 90.0, // Default 90s full loop cycle
+            time: 0,
+            isPlaying: true,
+            isExporting: false,
+            exportResolution: { width: 1920, height: 1080 }
+        };
+
+        /* Shaders for dynamic twinkling glowing stars */
+        const vertexShader = `
+            uniform float uTime;
+            uniform float uDuration;
+            uniform float uGlowSize;
+            uniform float uRadius;
+            uniform float uPixelRatio;
+
+            attribute vec3 aRandomPos;
+            attribute vec3 aSphereNormal;
+            attribute float aSize;
+            attribute float aSeed;
+
+            varying float vAlpha;
+            varying float vSeed;
+
+            // Smooth cubic easing
+            float cubicInOut(float t) {
+                return t < 0.5 ? 4.0 * t * t * t : 1.0 - pow(-2.0 * t + 2.0, 3.0) / 2.0;
+            }
+
+            void main() {
+                vSeed = aSeed;
+
+                // Normalized progress: 0.0 to 1.0 over duration
+                float progress = mod(uTime, uDuration) / uDuration;
+
+                // Phase breakdown:
+                // 0s -> 10s (0.0 to 0.111): Fade in at random positions
+                // 10s -> 60s (0.111 to 0.666): Morph from random positions into sphere
+                // 60s -> 90s (0.666 to 1.0): Fade out while returning to original position
+
+                float alpha = 0.0;
+                float morphProgress = 0.0;
+
+                float pFadeIn = 10.0 / uDuration;   // ~0.111
+                float pSphere = 60.0 / uDuration;   // ~0.666
+
+                if (progress < pFadeIn) {
+                    // Fade in at random position
+                    float t = progress / pFadeIn;
+                    alpha = smoothstep(0.0, 1.0, t);
+                    morphProgress = 0.0;
+                } else if (progress < pSphere) {
+                    // Morph to sphere and maintain full alpha
+                    alpha = 1.0;
+                    float t = (progress - pFadeIn) / (pSphere - pFadeIn);
+                    morphProgress = cubicInOut(t);
+                } else {
+                    // Return to random positions and fade out completely
+                    float t = (progress - pSphere) / (1.0 - pSphere);
+                    alpha = 1.0 - smoothstep(0.0, 1.0, t);
+                    morphProgress = 1.0 - cubicInOut(t);
+                }
+
+                vAlpha = alpha;
+
+                // Compute position interpolation
+                vec3 sphereTarget = aSphereNormal * uRadius;
+                vec3 currentPos = mix(aRandomPos, sphereTarget, morphProgress);
+
+                vec4 mvPosition = modelViewMatrix * vec4(currentPos, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+
+                // Size attenuation based on distance and point size setting
+                gl_PointSize = (aSize * uGlowSize * uPixelRatio) * (1.0 / -mvPosition.z);
+            }
+        `;
+
+        const fragmentShader = `
+            uniform float uTime;
+            uniform float uBrightness;
+            uniform float uTwinkleSpeed;
+
+            varying float vAlpha;
+            varying float vSeed;
+
+            void main() {
+                // Distance from center of point for smooth circular particle glow
+                vec2 coord = gl_PointCoord - vec2(0.5);
+                float dist = length(coord);
+
+                if (dist > 0.5) discard;
+
+                // Core brightness and outer soft halo intensity
+                float core = smoothstep(0.5, 0.0, dist);
+                float halo = pow(core, 2.5);
+
+                // Subtle organic flickering/twinkling effect using sines with per-star seed offset
+                float twinkle = 0.75 + 0.25 * sin(uTime * 3.0 * uTwinkleSpeed + vSeed * 628.318);
+                float subtleGlow = 0.85 + 0.15 * cos(uTime * 1.5 * uTwinkleSpeed + vSeed * 314.159);
+
+                float finalAlpha = vAlpha * (halo + core * 0.5) * twinkle * subtleGlow * uBrightness;
+
+                // Subtle cool white / distant star blue-white hue tinting
+                vec3 starColor = mix(vec3(0.9, 0.95, 1.0), vec3(1.0, 1.0, 1.0), sin(vSeed * 10.0) * 0.5 + 0.5);
+
+                gl_FragColor = vec4(starColor, clamp(finalAlpha, 0.0, 1.0));
+            }
+        `;
+
+        let scene, camera, renderer, particlesGeometry, particleMaterial, particleSystem;
+        let animationFrameId = null;
+        let clock = new THREE.Clock();
+
+        const canvas = document.getElementById('webglCanvas');
+        const container = document.getElementById('canvasViewport');
+
+        function initScene() {
+            // Scene Setup
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x030712, 0.015);
+
+            // Camera Setup (16:9 fixed frustum ratio)
+            camera = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 1000);
+            camera.position.set(0, 0, 18);
+
+            // WebGL Renderer Setup with high-precision antialiasing
+            renderer = new THREE.WebGLRenderer({
+                canvas: canvas,
+                antialias: true,
+                alpha: false,
+                preserveDrawingBuffer: true // Required for canvas frame capture
+            });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setClearColor(0x030712, 1.0);
+
+            // Generate geometry and material
+            createParticles();
+
+            // Initial Resize handling
+            onWindowResize();
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        // Fibonacci Sphere Point Generator for even spherical distribution
+        function generateFibonacciSpherePoints(count) {
+            const points = [];
+            const phi = (1 + Math.sqrt(5)) / 2; // Golden ratio
+            for (let i = 0; i < count; i++) {
+                const theta = 2 * Math.PI * i / phi;
+                const y = 1 - (i / (count - 1)) * 2; // y goes from 1 to -1
+                const radiusAtY = Math.sqrt(1 - y * y); // radius at y
+                const x = Math.cos(theta) * radiusAtY;
+                const z = Math.sin(theta) * radiusAtY;
+                points.push(new THREE.Vector3(x, y, z));
+            }
+            return points;
+        }
+
+        function createParticles() {
+            if (particleSystem) {
+                scene.remove(particleSystem);
+                particlesGeometry.dispose();
+                particleMaterial.dispose();
+            }
+
+            const count = state.count;
+            particlesGeometry = new THREE.BufferGeometry();
+
+            const randomPositions = new Float32Array(count * 3);
+            const sphereNormals = new Float32Array(count * 3);
+            const sizes = new Float32Array(count);
+            const seeds = new Float32Array(count);
+
+            const spherePoints = generateFibonacciSpherePoints(count);
+
+            const spread = 22.0; // Random spread bounds
+
+            for (let i = 0; i < count; i++) {
+                // Random dispersed initial position
+                randomPositions[i * 3 + 0] = (Math.random() - 0.5) * spread;
+                randomPositions[i * 3 + 1] = (Math.random() - 0.5) * spread;
+                randomPositions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+
+                // Normalized spherical position vector
+                const sp = spherePoints[i];
+                sphereNormals[i * 3 + 0] = sp.x;
+                sphereNormals[i * 3 + 1] = sp.y;
+                sphereNormals[i * 3 + 2] = sp.z;
+
+                // Random size variations
+                sizes[i] = 0.6 + Math.random() * 0.8;
+
+                // Unique per-star seed for twinkling
+                seeds[i] = Math.random();
+            }
+
+            particlesGeometry.setAttribute('position', new THREE.BufferAttribute(randomPositions, 3));
+            particlesGeometry.setAttribute('aRandomPos', new THREE.BufferAttribute(randomPositions, 3));
+            particlesGeometry.setAttribute('aSphereNormal', new THREE.BufferAttribute(sphereNormals, 3));
+            particlesGeometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+            particlesGeometry.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+
+            // Custom GPU Shader Material
+            particleMaterial = new THREE.ShaderMaterial({
+                vertexShader: vertexShader,
+                fragmentShader: fragmentShader,
+                uniforms: {
+                    uTime: { value: 0 },
+                    uDuration: { value: state.duration },
+                    uBrightness: { value: state.brightness },
+                    uGlowSize: { value: state.glowSize },
+                    uTwinkleSpeed: { value: state.twinkleSpeed },
+                    uRadius: { value: state.radius },
+                    uPixelRatio: { value: renderer.getPixelRatio() }
+                },
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            particleSystem = new THREE.Points(particlesGeometry, particleMaterial);
+            scene.add(particleSystem);
+        }
+
+        function onWindowResize() {
+            if (state.isExporting) return; // Prevent layout jumps while rendering video
+
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(width, height);
+            if (particleMaterial) {
+                particleMaterial.uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio, 2);
+            }
+        }
+
+        // Animation Frame Loop
+        function animate() {
+            animationFrameId = requestAnimationFrame(animate);
+
+            if (state.isPlaying && !state.isExporting) {
+                const delta = clock.getDelta();
+                state.time += delta;
+            }
+
+            updateSceneAndUI();
+            renderer.render(scene, camera);
+        }
+
+        function updateSceneAndUI() {
+            // Loop time wrap
+            if (state.time >= state.duration) {
+                state.time = state.time % state.duration;
+            }
+
+            // Update Shader Uniforms
+            if (particleMaterial) {
+                particleMaterial.uniforms.uTime.value = state.time;
+                particleMaterial.uniforms.uDuration.value = state.duration;
+                particleMaterial.uniforms.uBrightness.value = state.brightness;
+                particleMaterial.uniforms.uGlowSize.value = state.glowSize;
+                particleMaterial.uniforms.uTwinkleSpeed.value = state.twinkleSpeed;
+                particleMaterial.uniforms.uRadius.value = state.radius;
+            }
+
+            // Slowly rotate sphere in 3D
+            if (particleSystem) {
+                particleSystem.rotation.y = state.time * state.rotationSpeed * 0.2;
+                particleSystem.rotation.x = Math.sin(state.time * 0.05) * 0.1;
+            }
+
+            // Update UI elements
+            const scrubber = document.getElementById('timelineScrubber');
+            const timeDisplay = document.getElementById('timeDisplay');
+            
+            if (scrubber && !scrubber.isInteracting) {
+                scrubber.value = (state.time / state.duration) * 100;
+            }
+
+            if (timeDisplay) {
+                timeDisplay.textContent = `${formatTime(state.time)} / ${formatTime(state.duration)}`;
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function setupEventListeners() {
+            // Play / Pause Toggle
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            const playPauseIcon = document.getElementById('playPauseIcon');
+
+            playPauseBtn.addEventListener('click', () => {
+                state.isPlaying = !state.isPlaying;
+                playPauseIcon.setAttribute('data-lucide', state.isPlaying ? 'pause' : 'play');
+                lucide.createIcons();
+                document.getElementById('statusBadge').textContent = state.isPlaying ? 'Active Loop' : 'Paused';
+            });
+
+            // Reset Timeline Button
+            document.getElementById('resetBtn').addEventListener('click', () => {
+                state.time = 0;
+            });
+
+            // Timeline Scrubber Input
+            const scrubber = document.getElementById('timelineScrubber');
+            scrubber.addEventListener('mousedown', () => scrubber.isInteracting = true);
+            scrubber.addEventListener('touchstart', () => scrubber.isInteracting = true);
+            
+            const updateScrubberValue = () => {
+                const val = parseFloat(scrubber.value);
+                state.time = (val / 100) * state.duration;
+            };
+
+            scrubber.addEventListener('input', updateScrubberValue);
+            scrubber.addEventListener('mouseup', () => scrubber.isInteracting = false);
+            scrubber.addEventListener('touchend', () => scrubber.isInteracting = false);
+
+            // Collapsible Panel Toggle
+            const toggleControlsBtn = document.getElementById('toggleControlsBtn');
+            const controlPanel = document.getElementById('controlPanel');
+            let isPanelVisible = true;
+
+            toggleControlsBtn.addEventListener('click', () => {
+                isPanelVisible = !isPanelVisible;
+                if (isPanelVisible) {
+                    controlPanel.classList.remove('translate-x-full', 'opacity-0', 'pointer-events-none');
+                } else {
+                    controlPanel.classList.add('translate-x-full', 'opacity-0', 'pointer-events-none');
+                }
+            });
+
+            // Fullscreen Toggle
+            document.getElementById('fullscreenBtn').addEventListener('click', () => {
+                const appContainer = document.getElementById('appContainer');
+                if (!document.fullscreenElement) {
+                    appContainer.requestFullscreen().catch(err => alert(`Fullscreen error: ${err.message}`));
+                } else {
+                    document.exitFullscreen();
+                }
+            });
+
+            // Input Sliders Bindings
+            bindSlider('starCountInput', 'starCountVal', '', val => {
+                state.count = parseInt(val);
+                document.getElementById('particleCountBadge').textContent = `${state.count.toLocaleString()} Stars`;
+                createParticles();
+            }, val => parseInt(val).toLocaleString());
+
+            bindSlider('brightnessInput', 'brightnessVal', '', val => state.brightness = parseFloat(val));
+            bindSlider('glowInput', 'glowVal', '', val => state.glowSize = parseFloat(val));
+            bindSlider('twinkleInput', 'twinkleVal', '', val => state.twinkleSpeed = parseFloat(val));
+            bindSlider('radiusInput', 'radiusVal', '', val => state.radius = parseFloat(val));
+            bindSlider('rotationInput', 'rotationVal', '', val => state.rotationSpeed = parseFloat(val));
+            bindSlider('durationInput', 'durationVal', 's', val => {
+                state.duration = parseFloat(val);
+            });
+
+            // Video Export Buttons
+            document.getElementById('export1080Btn').addEventListener('click', () => startVideoExport(1920, 1080));
+            document.getElementById('export4kBtn').addEventListener('click', () => startVideoExport(3840, 2160));
+            document.getElementById('cancelRenderBtn').addEventListener('click', cancelVideoExport);
+        }
+
+        function bindSlider(inputId, valId, unit, callback, formatFn) {
+            const input = document.getElementById(inputId);
+            const valDisplay = document.getElementById(valId);
+
+            input.addEventListener('input', (e) => {
+                const val = e.target.value;
+                valDisplay.textContent = formatFn ? formatFn(val) + unit : val + unit;
+                callback(val);
+            });
+        }
+
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let exportCancelRequested = false;
+
+        async function startVideoExport(targetWidth, targetHeight) {
+            state.isExporting = true;
+            state.isPlaying = false;
+            exportCancelRequested = false;
+
+            const modal = document.getElementById('renderModal');
+            const renderTitle = document.getElementById('renderTitle');
+            const renderSubtitle = document.getElementById('renderSubtitle');
+            const progressBar = document.getElementById('renderProgressBar');
+            const percentText = document.getElementById('renderPercent');
+
+            modal.classList.remove('hidden');
+            renderTitle.textContent = `Rendering ${targetWidth === 3840 ? '4K UHD' : '1080p'} Video`;
+            renderSubtitle.textContent = 'Capturing high-frame-rate WebM/MP4 loop. Please wait...';
+
+            // Resize canvas to targeted video dimensions
+            renderer.setSize(targetWidth, targetHeight, false);
+            camera.aspect = targetWidth / targetHeight;
+            camera.updateProjectionMatrix();
+            particleMaterial.uniforms.uPixelRatio.value = 1.0;
+
+            // Reset timeline to start
+            state.time = 0;
+
+            // Check browser MediaRecorder supported codecs
+            const stream = canvas.captureStream(60); // 60 FPS video capture stream
+            let mimeType = 'video/webm;codecs=vp9';
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = 'video/webm;codecs=vp8';
+                if (!MediaRecorder.isTypeSupported(mimeType)) {
+                    mimeType = 'video/webm';
+                }
+            }
+
+            recordedChunks = [];
+            try {
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: mimeType,
+                    videoBitsPerSecond: targetWidth > 2000 ? 25000000 : 12000000 // High bitrate for 4K / 1080p
+                });
+            } catch (e) {
+                alert('MediaRecorder is not supported in this browser format.');
+                cancelVideoExport();
+                return;
+            }
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                if (exportCancelRequested) return;
+
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `cosmic-sphere-${targetHeight}p-${Date.now()}.webm`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+
+                finishExport();
+            };
+
+            mediaRecorder.start();
+
+            // High Precision Step Rendering Engine
+            const totalDuration = state.duration;
+            const fps = 60;
+            const frameDelta = 1.0 / fps;
+            const totalFrames = Math.ceil(totalDuration * fps);
+            let currentFrame = 0;
+
+            async function renderFrameStep() {
+                if (exportCancelRequested) return;
+
+                state.time = currentFrame * frameDelta;
+                updateSceneAndUI();
+                renderer.render(scene, camera);
+
+                currentFrame++;
+                const progressPercent = Math.min(100, Math.round((currentFrame / totalFrames) * 100));
+                
+                progressBar.style.width = `${progressPercent}%`;
+                percentText.textContent = `${progressPercent}% (${currentFrame}/${totalFrames} frames)`;
+
+                if (currentFrame < totalFrames) {
+                    // Yield thread briefly to keep UI smooth and stream stable
+                    setTimeout(renderFrameStep, 1000 / fps);
+                } else {
+                    // Finish recording
+                    setTimeout(() => {
+                        mediaRecorder.stop();
+                    }, 500);
+                }
+            }
+
+            renderFrameStep();
+        }
+
+        function cancelVideoExport() {
+            exportCancelRequested = true;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            finishExport();
+        }
+
+        function finishExport() {
+            state.isExporting = false;
+            state.isPlaying = true;
+            document.getElementById('renderModal').classList.add('hidden');
+            onWindowResize(); // Restore canvas scaling
+        }
+
+        window.onload = function() {
+            initScene();
+            setupEventListeners();
+            animate();
+        };
+    </script>
+</body>
+</html>
